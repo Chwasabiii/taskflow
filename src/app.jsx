@@ -121,12 +121,12 @@ function App() {
     setSearchQuery,
     setSortMethod,
     setSelectedTaskIds,
-    setCategoryFilter,
     getTotalTasks,
     getCompletedTasks,
     getPendingTasks,
     getProductivityScore,
-  } = useTaskManager(workspaceId);
+    joinTaskByCode,
+  } = useTaskManager(user);
 
   const [page, setPage] = useState("dashboard");
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -885,62 +885,6 @@ function App() {
               </button>
               <button className="rounded-3xl bg-blue-600 px-5 py-3 hover:bg-blue-500" onClick={handleCreateTask}>
                 Create task
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {inviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6">
-          <div className="w-full max-w-2xl rounded-[32px] border border-slate-800 bg-slate-950 p-8 shadow-2xl">
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-2xl font-semibold">Share invite code</h3>
-                <p className="mt-2 text-slate-400">Send this code to collaborators to join your workspace.</p>
-              </div>
-
-              <div className="rounded-3xl border border-emerald-600/50 bg-emerald-950/30 p-6">
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Your invite code</p>
-                <div className="mt-4 flex items-center justify-between gap-4">
-                  <p className="text-3xl font-bold font-mono">{inviteCode}</p>
-                  <button
-                    className="rounded-2xl bg-emerald-600 px-4 py-3 hover:bg-emerald-500"
-                    onClick={() => {
-                      navigator.clipboard.writeText(inviteCode);
-                      setStatusMessage("Invite code copied to clipboard!");
-                    }}
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Join with code</p>
-                <div className="flex gap-3">
-                  <input
-                    value={joinCodeInput}
-                    onChange={(event) => setJoinCodeInput(event.target.value)}
-                    placeholder="Paste invite code here..."
-                    className="flex-1 rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none"
-                  />
-                  <button
-                    className="rounded-2xl bg-blue-600 px-5 py-3 hover:bg-blue-500"
-                    onClick={handleJoinWithCode}
-                  >
-                    Join
-                  </button>
-                </div>
-              </div>
-
-              <button
-                className="w-full rounded-3xl bg-slate-800 px-5 py-3 hover:bg-slate-700"
-                onClick={() => {
-                  setInviteModalOpen(false);
-                  setJoinCodeInput("");
-                }}
-              >
-                Close
               </button>
             </div>
           </div>

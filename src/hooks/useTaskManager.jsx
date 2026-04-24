@@ -8,7 +8,7 @@ export const PRIORITY_PALETTE = {
   urgent: { label: "Urgent", classes: "bg-red-500/20 text-red-300 border border-red-500/50" },
 };
 
-export default function useTaskManager(workspaceId = null) {
+export default function useTaskManager(user = null) {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -19,59 +19,62 @@ export default function useTaskManager(workspaceId = null) {
   const [loading, setLoading] = useState(true);
 
   const fetchTasks = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!user) return;
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('workspace_id', workspaceId)
+      .or(`user_id.eq.${user.id},and(invite_code.not.is.null,exists(select 1 from task_invites where task_id = tasks.id and user_id = ${user.id}))`)
       .order('created_at', { ascending: false });
     if (error) console.error(error);
     else setTasks(data);
-  }, [workspaceId]);
+  }, [user]);
 
   const fetchArchivedTasks = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!user) return;
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
-      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
       .eq('completed', true)
       .order('created_at', { ascending: false });
     if (error) console.error(error);
     else setArchivedTasks(data);
-  }, [workspaceId]);
+  }, [user]);
 
   const fetchCategories = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!user) return;
     const { data, error } = await supabase
       .from('categories')
       .select('*')
-      .eq('workspace_id', workspaceId)
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (error) console.error(error);
     else setCategories(data);
-  }, [workspaceId]);
+  }, [user]);
 
   useEffect(() => {
-    if (workspaceId) {
+    if (user) {
       fetchTasks();
       fetchArchivedTasks();
       fetchCategories();
       setLoading(false);
     }
-  }, [workspaceId, fetchTasks, fetchArchivedTasks, fetchCategories]);
+  }, [user, fetchTasks, fetchArchivedTasks, fetchCategories]);
 
   const createTask = async (task) => {
     const inviteCode = `TASK-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const { data, error } = await supabase
       .from('tasks')
-      .insert([{ ...task, invite_code: inviteCode }])
+      .insert([{ ...task, user_id: user.id, invite_code: inviteCode }])
       .select();
     if (error) console.error(error);
     else setTasks([data[0], ...tasks]);
   };
 
   const joinTaskByCode = async (code) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     const { data: task, error: taskError } = await supabase
       .from('tasks')
       .select('*')
@@ -81,7 +84,7 @@ export default function useTaskManager(workspaceId = null) {
 
     const { error: inviteError } = await supabase
       .from('task_invites')
-      .insert([{ task_id: task.id, user_id: supabase.auth.user().id }]);
+      .insert([{ task_id: task.id, user_id: user.id }]);
     if (inviteError) throw inviteError;
 
     setTasks([task, ...tasks]);
@@ -157,7 +160,7 @@ export default function useTaskManager(workspaceId = null) {
   const createCategory = async (name, color) => {
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name, color, workspace_id: workspaceId }])
+      .insert([{ name, color, user_id: user.id }])
       .select();
     if (error) console.error(error);
     else setCategories([data[0], ...categories]);
