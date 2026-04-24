@@ -6,10 +6,12 @@ import useDeadlineNotifications from "./hooks/useDeadlineNotifications";
 import useAuth from "./hooks/useAuth";
 
 function App() {
-  const { isAuthenticated, user, signup, login, logout } = useAuth();
+  const { isAuthenticated, user, signUp, signIn, signOut, loading } = useAuth();
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({ email: "", password: "", name: "" });
   const [authError, setAuthError] = useState("");
+
+  if (loading) return <div>Loading...</div>;
 
   if (!isAuthenticated) {
     return (
@@ -45,27 +47,7 @@ function App() {
             </button>
           </div>
 
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              try {
-                if (authMode === "login") {
-                  login(authForm.email, authForm.password);
-                } else {
-                  if (!authForm.name.trim()) {
-                    setAuthError("Name is required");
-                    return;
-                  }
-                  signup(authForm.email, authForm.password, authForm.name);
-                }
-                setAuthForm({ email: "", password: "", name: "" });
-                setAuthError("");
-              } catch (error) {
-                setAuthError(error.message);
-              }
-            }}
-          >
+          <form className="space-y-4" onSubmit={handleAuthSubmit}>
             {authMode === "signup" && (
               <label className="space-y-2 text-sm text-slate-300">
                 Full name
@@ -216,19 +198,18 @@ function App() {
 
   const handleCreateTask = () => {
     if (!taskForm.title.trim()) return;
-    
+
     if (taskForm.dueDate) {
       const selectedDate = new Date(taskForm.dueDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
       if (selectedDate < today) {
         setStatusMessage("Due date cannot be in the past.");
         return;
       }
     }
-    
-    createTask({ ...taskForm });
+
+    createTask({ ...taskForm, workspaceId });
     setTaskForm({ title: "", description: "", priority: "medium", dueDate: "", dueTime: "", category: "general" });
     setCreateModalOpen(false);
     setStatusMessage("Task created successfully.");
@@ -252,22 +233,36 @@ function App() {
   const [newCategoryColor, setNewCategoryColor] = useState("emerald");
 
   const handleInviteCode = () => {
+    const id = `ws-${Date.now()}`;
     const code = `INV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+    setWorkspaceId(id);
     setInviteCode(code);
+    setWorkspaces((current) => [
+      ...current,
+      {
+        id,
+        code,
+        owner: user?.id || "unknown",
+        members: [user?.id || "owner"],
+      },
+    ]);
+
     setInviteModalOpen(true);
   };
 
   const handleJoinWithCode = () => {
-    if (!joinCodeInput.trim()) return;
-    setCollaborators((current) => [
-      ...current,
-      {
-        id: `collab-${Date.now()}`,
-        name: "Guest collaborator",
-        email: `${joinCodeInput.toLowerCase()}@taskflow.local`,
-      },
-    ]);
-    setStatusMessage("Joined using invite code.");
+    const workspace = workspaces.find((ws) => ws.code === joinCodeInput.trim());
+    if (!workspace) {
+      setStatusMessage("Invite code not found.");
+      return;
+    }
+    if (!workspace.members.includes(user?.id)) {
+      workspace.members.push(user?.id);
+    }
+    setWorkspaceId(workspace.id);
+    setWorkspaceMembers(workspace.members);
+    setStatusMessage("Joined workspace.");
     setJoinCodeInput("");
     setInviteModalOpen(false);
   };
@@ -351,6 +346,30 @@ function App() {
     );
   }
 
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+
+    try {
+      if (authMode === "signup") {
+        if (!authForm.name.trim()) {
+          setAuthError("Name is required");
+          return;
+        }
+
+        await signUp(authForm.email, authForm.password, authForm.name);
+        setAuthError("Signup successful. Check your email to confirm your account.");
+        setAuthMode("login");
+      } else {
+        await signIn(authForm.email, authForm.password);
+      }
+
+      setAuthForm({ email: "", password: "", name: "" });
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
@@ -386,7 +405,7 @@ function App() {
           </div>
 
           <button
-            onClick={logout}
+            onClick={signOut}
             className="mt-10 w-full rounded-2xl bg-red-600 px-4 py-3 text-sm hover:bg-red-500"
           >
             Logout
