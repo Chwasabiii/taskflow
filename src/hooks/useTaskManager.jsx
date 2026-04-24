@@ -1,6 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
+export const PRIORITY_PALETTE = {
+  low: { label: "Low", classes: "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50" },
+  medium: { label: "Medium", classes: "bg-yellow-500/20 text-yellow-300 border border-yellow-500/50" },
+  high: { label: "High", classes: "bg-orange-500/20 text-orange-300 border border-orange-500/50" },
+  urgent: { label: "Urgent", classes: "bg-red-500/20 text-red-300 border border-red-500/50" },
+};
+
 export default function useTaskManager(workspaceId = null) {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
