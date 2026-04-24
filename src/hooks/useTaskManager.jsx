@@ -1,199 +1,197 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 
-export default function useTaskManager() {
+export default function useTaskManager(workspaceId = null) {
   const [tasks, setTasks] = useState([]);
+  const [archivedTasks, setArchivedTasks] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMethod, setSortMethod] = useState('dateDesc');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchTasks();
-    fetchCategories();
-  }, []);
-
-  const fetchTasks = async () => {
-    const { data, error } = await supabase.from('tasks').select('*');
+  const fetchTasks = useCallback(async () => {
+    if (!workspaceId) return;
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
     if (error) console.error(error);
     else setTasks(data);
-    setLoading(false);
-  };
+  }, [workspaceId]);
+
+  const fetchArchivedTasks = useCallback(async () => {
+    if (!workspaceId) return;
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .eq('completed', true)
+      .order('created_at', { ascending: false });
+    if (error) console.error(error);
+    else setArchivedTasks(data);
+  }, [workspaceId]);
+
+  const fetchCategories = useCallback(async () => {
+    if (!workspaceId) return;
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('workspace_id', workspaceId)
+      .order('created_at', { ascending: false });
+    if (error) console.error(error);
+    else setCategories(data);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (workspaceId) {
+      fetchTasks();
+      fetchArchivedTasks();
+      fetchCategories();
+      setLoading(false);
+    }
+  }, [workspaceId, fetchTasks, fetchArchivedTasks, fetchCategories]);
 
   const createTask = async (task) => {
-    const { data, error } = await supabase.from('tasks').insert([task]).select();
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([{ ...task, workspace_id: workspaceId }])
+      .select();
     if (error) console.error(error);
-    else setTasks([...tasks, data[0]]);
+    else setTasks([data[0], ...tasks]);
   };
 
   const updateTask = async (id, updates) => {
-    const { data, error } = await supabase.from('tasks').update(updates).eq('id', id);
+    const { data, error } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', id)
+      .select();
     if (error) console.error(error);
-    else setTasks((current) =>
-      current.map((task) =>
-        task.id === id ? { ...task, ...updates, updatedAt: nowIso() } : task
-      )
-    );
+    else setTasks(tasks.map(t => t.id === id ? data[0] : t));
   };
 
   const deleteTask = async (id) => {
-    const { data, error } = await supabase.from('tasks').delete().eq('id', id);
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) console.error(error);
-    else setTasks((current) => current.filter((task) => task.id !== id));
-  };
-
-  const duplicateTask = async (id) => {
-    const { data, error } = await supabase.from('tasks').select('*').eq('id', id);
-    if (error) console.error(error);
-    else {
-      const duplicate = {
-        ...data[0],
-        id: createId(),
-        title: `${data[0].title} copy`,
-        completed: false,
-        archived: false,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-      setTasks([...tasks, duplicate]);
-    }
-  };
-
-  const bulkDelete = async (ids) => {
-    const { data, error } = await supabase.from('tasks').delete().in('id', ids);
-    if (error) console.error(error);
-    else setTasks((current) => current.filter((task) => !ids.includes(task.id)));
-  };
-
-  const bulkComplete = async (ids) => {
-    const { data, error } = await supabase.from('tasks').update({ completed: true }).in('id', ids);
-    if (error) console.error(error);
-    else setTasks((current) =>
-      current.map((task) =>
-        ids.includes(task.id) ? { ...task, completed: true, updatedAt: nowIso() } : task
-      )
-    );
+    else setTasks(tasks.filter(t => t.id !== id));
   };
 
   const toggleComplete = async (id) => {
-    const { data, error } = await supabase.from('tasks').update({ completed: !task.completed }).eq('id', id);
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    await updateTask(id, { completed: !task.completed });
+  };
+
+  const duplicateTask = async (id) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const { id: _, ...taskCopy } = task;
+    await createTask({ ...taskCopy, title: `${task.title} (Copy)` });
+  };
+
+  const bulkComplete = async (ids) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ completed: true })
+      .in('id', ids);
     if (error) console.error(error);
-    else setTasks((current) =>
-      current.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed, updatedAt: nowIso() } : task
-      )
-    );
+    else setTasks(tasks.map(t => ids.includes(t.id) ? { ...t, completed: true } : t));
+  };
+
+  const bulkDelete = async (ids) => {
+    const { error } = await supabase.from('tasks').delete().in('id', ids);
+    if (error) console.error(error);
+    else setTasks(tasks.filter(t => !ids.includes(t.id)));
   };
 
   const archiveTask = async (id) => {
-    const { data, error } = await supabase.from('tasks').update({ archived: true }).eq('id', id);
-    if (error) console.error(error);
-    else setTasks((current) =>
-      current.filter((task) => {
-        if (task.id !== id) return true;
-        setArchivedTasks((archived) => [
-          { ...task, archived: true, archivedAt: nowIso() },
-          ...archived,
-        ]);
-        return false;
-      })
-    );
+    await updateTask(id, { completed: true });
+    setArchivedTasks([...archivedTasks, tasks.find(t => t.id === id)]);
+    setTasks(tasks.filter(t => t.id !== id));
   };
 
   const restoreTask = async (id) => {
-    const { data, error } = await supabase.from('tasks').update({ archived: false }).eq('id', id);
-    if (error) console.error(error);
-    else setTasks((active) => [{ ...task, archived: false, updatedAt: nowIso() }, ...active]);
+    await updateTask(id, { completed: false });
+    setTasks([...tasks, archivedTasks.find(t => t.id === id)]);
+    setArchivedTasks(archivedTasks.filter(t => t.id !== id));
   };
 
   const deleteArchivedTask = async (id) => {
-    const { data, error } = await supabase.from('tasks').delete().eq('id', id);
+    const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (error) console.error(error);
-    else setArchivedTasks((current) => current.filter((task) => task.id !== id));
+    else setArchivedTasks(archivedTasks.filter(t => t.id !== id));
   };
 
-  const getArchivedTasks = useCallback(() => archivedTasks, [archivedTasks]);
-
-  const setPriority = useCallback((taskId, priority) => {
-    if (!PRIORITY_PALETTE[priority]) return;
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === taskId ? { ...task, priority, updatedAt: nowIso() } : task
-      )
-    );
-  }, []);
-
-  const createCategory = async (name, color = "slate") => {
-    const { data, error } = await supabase.from('categories').insert([{ name, color }]).select();
-    if (error) console.error(error);
-    else setCategories([...categories, data[0]]);
+  const setPriority = async (id, priority) => {
+    await updateTask(id, { priority });
   };
 
-  const deleteCategory = useCallback((id) => {
-    if (id === "general") return;
-    setCategories((current) => current.filter((category) => category.id !== id));
-    setTasks((current) =>
-      current.map((task) => (task.category === id ? { ...task, category: "general" } : task))
-    );
-    setCategoryFilter((current) => (current === id ? "all" : current));
-  }, []);
+  const createCategory = async (name, color) => {
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([{ name, color, workspace_id: workspaceId }])
+      .select();
+    if (error) console.error(error);
+    else setCategories([data[0], ...categories]);
+  };
 
-  const assignCategory = useCallback(
-    (taskId, categoryId) => {
-      if (!categories.some((category) => category.id === categoryId)) return;
-      setTasks((current) =>
-        current.map((task) =>
-          task.id === taskId ? { ...task, category: categoryId, updatedAt: nowIso() } : task
-        )
-      );
-    },
-    [categories]
-  );
+  const deleteCategory = async (id) => {
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (error) console.error(error);
+    else setCategories(categories.filter(c => c.id !== id));
+  };
 
-  const filterByCategory = useCallback((categoryId) => {
+  const assignCategory = async (taskId, categoryId) => {
+    await updateTask(taskId, { category: categoryId });
+  };
+
+  const filterByCategory = (categoryId) => {
     setCategoryFilter(categoryId);
-  }, []);
+  };
 
-  const filteredTasks = useMemo(() => {
-    let list = [...tasks];
+  const filteredTasks = tasks
+    .filter((task) => {
+      const matchesSearch = !searchQuery || task.title.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = !categoryFilter || task.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => {
+      switch (sortMethod) {
+        case 'dateAsc':
+          return new Date(a.created_at) - new Date(b.created_at);
+        case 'dateDesc':
+          return new Date(b.created_at) - new Date(a.created_at);
+        case 'dueAsc':
+          return new Date(a.dueDate) - new Date(b.dueDate);
+        case 'priority':
+          const priorityOrder = { low: 1, medium: 2, high: 3, urgent: 4 };
+          return priorityOrder[b.priority] - priorityOrder[a.priority];
+        default:
+          return 0;
+      }
+    });
 
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      list = list.filter(
-        (task) =>
-          task.title.toLowerCase().includes(query) ||
-          task.description.toLowerCase().includes(query) ||
-          task.category.toLowerCase().includes(query)
-      );
-    }
-
-    if (categoryFilter !== "all") {
-      list = list.filter((task) => task.category === categoryFilter);
-    }
-
-    if (sortMethod === "dateAsc") {
-      list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    } else if (sortMethod === "dateDesc") {
-      list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    } else if (sortMethod === "dueAsc") {
-      list.sort((a, b) => (a.dueDate || "9999") > (b.dueDate || "9999") ? 1 : -1);
-    } else if (sortMethod === "priority") {
-      const rank = { urgent: 0, high: 1, medium: 2, low: 3 };
-      list.sort((a, b) => rank[a.priority] - rank[b.priority]);
-    }
-
-    return list;
-  }, [tasks, searchQuery, categoryFilter, sortMethod]);
-
-  const getTotalTasks = useCallback(() => tasks.length, [tasks]);
-  const getCompletedTasks = useCallback(() => tasks.filter((task) => task.completed).length, [tasks]);
-  const getPendingTasks = useCallback(() => tasks.filter((task) => !task.completed).length, [tasks]);
-  const getProductivityScore = useCallback(() => {
-    const total = getTotalTasks() || 1;
-    return Math.round((getCompletedTasks() / total) * 100);
-  }, [getCompletedTasks, getTotalTasks]);
+  const getTotalTasks = () => tasks.length;
+  const getCompletedTasks = () => tasks.filter(t => t.completed).length;
+  const getPendingTasks = () => tasks.filter(t => !t.completed).length;
+  const getProductivityScore = () => {
+    const total = getTotalTasks();
+    const completed = getCompletedTasks();
+    return total > 0 ? Math.round((completed / total) * 100) : 0;
+  };
 
   return {
     tasks,
+    archivedTasks,
     categories,
+    selectedTaskIds,
+    categoryFilter,
+    searchQuery,
+    sortMethod,
+    filteredTasks,
     loading,
     createTask,
     updateTask,
@@ -205,7 +203,6 @@ export default function useTaskManager() {
     archiveTask,
     restoreTask,
     deleteArchivedTask,
-    getArchivedTasks,
     setPriority,
     createCategory,
     deleteCategory,
@@ -214,11 +211,9 @@ export default function useTaskManager() {
     setSearchQuery,
     setSortMethod,
     setSelectedTaskIds,
-    setCategoryFilter,
     getTotalTasks,
     getCompletedTasks,
     getPendingTasks,
     getProductivityScore,
-    PRIORITY_PALETTE,
   };
 }

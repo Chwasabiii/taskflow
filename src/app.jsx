@@ -126,7 +126,7 @@ function App() {
     getCompletedTasks,
     getPendingTasks,
     getProductivityScore,
-  } = useTaskManager();
+  } = useTaskManager(workspaceId);
 
   const [page, setPage] = useState("dashboard");
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -153,6 +153,10 @@ function App() {
     voiceEnabled: true,
   });
   const [statusMessage, setStatusMessage] = useState("");
+
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspaceMembers, setWorkspaceMembers] = useState([]);
 
   const { session, pomodoroSessions, startPomodoro, pausePomodoro, resetPomodoro, formatTime } = usePomodoro(settings);
 
