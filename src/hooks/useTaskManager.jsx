@@ -55,12 +55,30 @@ export default function useTaskManager(workspaceId = null) {
   }, [workspaceId, fetchTasks, fetchArchivedTasks, fetchCategories]);
 
   const createTask = async (task) => {
+    const inviteCode = `TASK-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
     const { data, error } = await supabase
       .from('tasks')
-      .insert([{ ...task, workspace_id: workspaceId }])
+      .insert([{ ...task, invite_code: inviteCode }])
       .select();
     if (error) console.error(error);
     else setTasks([data[0], ...tasks]);
+  };
+
+  const joinTaskByCode = async (code) => {
+    const { data: task, error: taskError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('invite_code', code)
+      .single();
+    if (taskError || !task) throw new Error('Invalid invite code');
+
+    const { error: inviteError } = await supabase
+      .from('task_invites')
+      .insert([{ task_id: task.id, user_id: supabase.auth.user().id }]);
+    if (inviteError) throw inviteError;
+
+    setTasks([task, ...tasks]);
+    return task;
   };
 
   const updateTask = async (id, updates) => {
@@ -215,5 +233,6 @@ export default function useTaskManager(workspaceId = null) {
     getCompletedTasks,
     getPendingTasks,
     getProductivityScore,
+    joinTaskByCode,
   };
 }
