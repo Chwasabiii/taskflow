@@ -11,6 +11,27 @@ function App() {
   const [authForm, setAuthForm] = useState({ email: "", password: "", name: "" });
   const [authError, setAuthError] = useState("");
 
+  const handleAuthSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError("");
+
+    try {
+      if (authMode === "signup") {
+        if (!authForm.name.trim()) {
+          setAuthError("Name is required");
+          return;
+        }
+        await signUp(authForm.email, authForm.password, authForm.name);
+        setAuthMode("login");
+      } else {
+        await signIn(authForm.email, authForm.password);
+      }
+      setAuthForm({ email: "", password: "", name: "" });
+    } catch (error) {
+      setAuthError(error.message);
+    }
+  };
+
   if (loading) return <div>Loading...</div>;
 
   if (!isAuthenticated) {
@@ -349,30 +370,6 @@ function App() {
       </div>
     );
   }
-
-  const handleAuthSubmit = async (e) => {
-    e.preventDefault();
-    setAuthError("");
-
-    try {
-      if (authMode === "signup") {
-        if (!authForm.name.trim()) {
-          setAuthError("Name is required");
-          return;
-        }
-
-        await signUp(authForm.email, authForm.password, authForm.name);
-        setAuthError("Signup successful. Check your email to confirm your account.");
-        setAuthMode("login");
-      } else {
-        await signIn(authForm.email, authForm.password);
-      }
-
-      setAuthForm({ email: "", password: "", name: "" });
-    } catch (error) {
-      setAuthError(error.message);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
