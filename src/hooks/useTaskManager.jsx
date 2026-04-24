@@ -1,103 +1,92 @@
-import { useCallback, useMemo, useState } from "react";
-
-const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-const nowIso = () => new Date().toISOString();
-
-export const PRIORITY_PALETTE = {
-  low: { label: "Low", classes: "bg-slate-600 text-slate-100" },
-  medium: { label: "Medium", classes: "bg-blue-600 text-white" },
-  high: { label: "High", classes: "bg-orange-500 text-white" },
-  urgent: { label: "Urgent", classes: "bg-red-500 text-white" },
-};
-
-const initialCategories = [
-  { id: "general", name: "General", color: "slate" },
-  { id: "work", name: "Work", color: "blue" },
-  { id: "personal", name: "Personal", color: "emerald" },
-];
-
-const buildTask = ({ title, description = "", priority = "medium", dueDate = null, category = "general" }) => ({
-  id: createId(),
-  title: title.trim(),
-  description: description.trim(),
-  priority,
-  dueDate,
-  category,
-  completed: false,
-  archived: false,
-  createdAt: nowIso(),
-  updatedAt: nowIso(),
-});
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 export default function useTaskManager() {
   const [tasks, setTasks] = useState([]);
-  const [archivedTasks, setArchivedTasks] = useState([]);
-  const [categories, setCategories] = useState(initialCategories);
-  const [selectedTaskIds, setSelectedTaskIds] = useState([]);
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortMethod, setSortMethod] = useState("dateDesc");
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const createTask = useCallback((payload) => {
-    if (!payload.title?.trim()) return null;
-    const task = buildTask(payload);
-    setTasks((current) => [task, ...current]);
-    return task;
+  useEffect(() => {
+    fetchTasks();
+    fetchCategories();
   }, []);
 
-  const updateTask = useCallback((id, updates) => {
-    setTasks((current) =>
+  const fetchTasks = async () => {
+    const { data, error } = await supabase.from('tasks').select('*');
+    if (error) console.error(error);
+    else setTasks(data);
+    setLoading(false);
+  };
+
+  const createTask = async (task) => {
+    const { data, error } = await supabase.from('tasks').insert([task]).select();
+    if (error) console.error(error);
+    else setTasks([...tasks, data[0]]);
+  };
+
+  const updateTask = async (id, updates) => {
+    const { data, error } = await supabase.from('tasks').update(updates).eq('id', id);
+    if (error) console.error(error);
+    else setTasks((current) =>
       current.map((task) =>
         task.id === id ? { ...task, ...updates, updatedAt: nowIso() } : task
       )
     );
-  }, []);
+  };
 
-  const deleteTask = useCallback((id) => {
-    setTasks((current) => current.filter((task) => task.id !== id));
-    setSelectedTaskIds((current) => current.filter((selected) => selected !== id));
-  }, []);
+  const deleteTask = async (id) => {
+    const { data, error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) console.error(error);
+    else setTasks((current) => current.filter((task) => task.id !== id));
+  };
 
-  const duplicateTask = useCallback((id) => {
-    setTasks((current) => {
-      const original = current.find((task) => task.id === id);
-      if (!original) return current;
+  const duplicateTask = async (id) => {
+    const { data, error } = await supabase.from('tasks').select('*').eq('id', id);
+    if (error) console.error(error);
+    else {
       const duplicate = {
-        ...original,
+        ...data[0],
         id: createId(),
-        title: `${original.title} copy`,
+        title: `${data[0].title} copy`,
         completed: false,
         archived: false,
         createdAt: nowIso(),
         updatedAt: nowIso(),
       };
-      return [duplicate, ...current];
-    });
-  }, []);
+      setTasks([...tasks, duplicate]);
+    }
+  };
 
-  const bulkDelete = useCallback((ids) => {
-    setTasks((current) => current.filter((task) => !ids.includes(task.id)));
-    setSelectedTaskIds([]);
-  }, []);
+  const bulkDelete = async (ids) => {
+    const { data, error } = await supabase.from('tasks').delete().in('id', ids);
+    if (error) console.error(error);
+    else setTasks((current) => current.filter((task) => !ids.includes(task.id)));
+  };
 
-  const bulkComplete = useCallback((ids) => {
-    setTasks((current) =>
+  const bulkComplete = async (ids) => {
+    const { data, error } = await supabase.from('tasks').update({ completed: true }).in('id', ids);
+    if (error) console.error(error);
+    else setTasks((current) =>
       current.map((task) =>
         ids.includes(task.id) ? { ...task, completed: true, updatedAt: nowIso() } : task
       )
     );
-  }, []);
+  };
 
-  const toggleComplete = useCallback((id) => {
-    setTasks((current) =>
+  const toggleComplete = async (id) => {
+    const { data, error } = await supabase.from('tasks').update({ completed: !task.completed }).eq('id', id);
+    if (error) console.error(error);
+    else setTasks((current) =>
       current.map((task) =>
         task.id === id ? { ...task, completed: !task.completed, updatedAt: nowIso() } : task
       )
     );
-  }, []);
+  };
 
-  const archiveTask = useCallback((id) => {
-    setTasks((current) =>
+  const archiveTask = async (id) => {
+    const { data, error } = await supabase.from('tasks').update({ archived: true }).eq('id', id);
+    if (error) console.error(error);
+    else setTasks((current) =>
       current.filter((task) => {
         if (task.id !== id) return true;
         setArchivedTasks((archived) => [
@@ -107,22 +96,19 @@ export default function useTaskManager() {
         return false;
       })
     );
-    setSelectedTaskIds((current) => current.filter((selected) => selected !== id));
-  }, []);
+  };
 
-  const restoreTask = useCallback((id) => {
-    setArchivedTasks((current) =>
-      current.filter((task) => {
-        if (task.id !== id) return true;
-        setTasks((active) => [{ ...task, archived: false, updatedAt: nowIso() }, ...active]);
-        return false;
-      })
-    );
-  }, []);
+  const restoreTask = async (id) => {
+    const { data, error } = await supabase.from('tasks').update({ archived: false }).eq('id', id);
+    if (error) console.error(error);
+    else setTasks((active) => [{ ...task, archived: false, updatedAt: nowIso() }, ...active]);
+  };
 
-  const deleteArchivedTask = useCallback((id) => {
-    setArchivedTasks((current) => current.filter((task) => task.id !== id));
-  }, []);
+  const deleteArchivedTask = async (id) => {
+    const { data, error } = await supabase.from('tasks').delete().eq('id', id);
+    if (error) console.error(error);
+    else setArchivedTasks((current) => current.filter((task) => task.id !== id));
+  };
 
   const getArchivedTasks = useCallback(() => archivedTasks, [archivedTasks]);
 
@@ -135,14 +121,11 @@ export default function useTaskManager() {
     );
   }, []);
 
-  const createCategory = useCallback((name, color = "slate") => {
-    if (!name.trim()) return;
-    const id = name.toLowerCase().replace(/\s+/g, "-");
-    setCategories((current) => {
-      if (current.some((category) => category.id === id)) return current;
-      return [...current, { id, name: name.trim(), color }];
-    });
-  }, []);
+  const createCategory = async (name, color = "slate") => {
+    const { data, error } = await supabase.from('categories').insert([{ name, color }]).select();
+    if (error) console.error(error);
+    else setCategories([...categories, data[0]]);
+  };
 
   const deleteCategory = useCallback((id) => {
     if (id === "general") return;
@@ -210,13 +193,8 @@ export default function useTaskManager() {
 
   return {
     tasks,
-    archivedTasks,
     categories,
-    selectedTaskIds,
-    categoryFilter,
-    searchQuery,
-    sortMethod,
-    filteredTasks,
+    loading,
     createTask,
     updateTask,
     deleteTask,

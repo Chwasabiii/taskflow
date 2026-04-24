@@ -1,62 +1,59 @@
-import { useState, useCallback } from "react";
+import { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 
 export default function useAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return !!localStorage.getItem("taskflow_user");
-  });
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem("taskflow_user");
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const signup = useCallback((email, password, name) => {
-    const users = JSON.parse(localStorage.getItem("taskflow_users") || "[]");
-    
-    if (users.find((u) => u.email === email)) {
-      throw new Error("Email already registered");
-    }
-
-    const newUser = {
-      id: `user-${Date.now()}`,
-      email,
-      password,
-      name,
-      createdAt: new Date().toISOString(),
+  useEffect(() => {
+    const getSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      setLoading(false);
     };
 
-    users.push(newUser);
-    localStorage.setItem("taskflow_users", JSON.stringify(users));
-    localStorage.setItem("taskflow_user", JSON.stringify(newUser));
-    setUser(newUser);
-    setIsAuthenticated(true);
-    return newUser;
+    getSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = useCallback((email, password) => {
-    const users = JSON.parse(localStorage.getItem("taskflow_users") || "[]");
-    const foundUser = users.find((u) => u.email === email && u.password === password);
+  const signUp = async (email, password, name) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name },
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
 
-    if (!foundUser) {
-      throw new Error("Invalid email or password");
-    }
+  const signIn = async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (error) throw error;
+    return data;
+  };
 
-    localStorage.setItem("taskflow_user", JSON.stringify(foundUser));
-    setUser(foundUser);
-    setIsAuthenticated(true);
-    return foundUser;
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem("taskflow_user");
-    setUser(null);
-    setIsAuthenticated(false);
-  }, []);
+  const signOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  };
 
   return {
-    isAuthenticated,
     user,
-    signup,
-    login,
-    logout,
+    loading,
+    signUp,
+    signIn,
+    signOut,
+    isAuthenticated: !!user,
   };
 }
