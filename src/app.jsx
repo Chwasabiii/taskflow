@@ -213,7 +213,7 @@ function App() {
       }
     }
 
-    createTask({ ...taskForm, workspaceId });
+    createTask(taskForm);
     setTaskForm({ title: "", description: "", priority: "medium", dueDate: "", dueTime: "", category: "general" });
     setCreateModalOpen(false);
     setStatusMessage("Task created successfully.");
@@ -380,7 +380,7 @@ function App() {
         <aside className="border-r border-slate-800 bg-slate-900/95 px-6 py-8">
           <div className="mb-8">
             <h1 className="text-3xl font-bold">TaskFlow</h1>
-            <p className="mt-2 text-slate-400 text-sm">Welcome, {user?.name}!</p>
+            <p className="mt-2 text-slate-400 text-sm">Welcome, {profile?.name || user?.email}!</p>
           </div>
 
           <nav className="space-y-2">
@@ -1024,6 +1024,17 @@ function TaskCard({ task, selected, onSelect, onToggle, onArchive, onDelete, onD
         <button className="rounded-2xl bg-emerald-600 px-4 py-2 text-sm hover:bg-emerald-500" onClick={onToggle}>
           {task.completed ? "Mark pending" : "Complete"}
         </button>
+        {task.invite_code && (
+          <button
+            className="rounded-2xl bg-blue-600 px-4 py-2 text-sm hover:bg-blue-500"
+            onClick={() => {
+              navigator.clipboard.writeText(task.invite_code);
+              setStatusMessage("Invite code copied!");
+            }}
+          >
+            Share
+          </button>
+        )}
         <button className="rounded-2xl bg-slate-800 px-4 py-2 text-sm hover:bg-slate-700" onClick={onArchive}>
           Archive
         </button>
